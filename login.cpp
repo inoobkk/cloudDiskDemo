@@ -1,4 +1,4 @@
-#include "login.h"
+﻿#include "login.h"
 #include "ui_login.h"
 #include <QPainter>
 #include <QMessageBox>
@@ -166,6 +166,7 @@ QByteArray Login::getRegJson(QString username, QString pwd, QString mail)
 // 并没有找到调用此函数的，该函数是如何被调用的？通过槽实现的
 void Login::on_reg_btn_clicked()
 {
+    qDebug() << "reg"<<endl;
     QString ip = ui->address->text();   //  获得ip地址
     QString port = ui->port->text();    // 获得端口号
     QString username = ui->name_reg->text();
@@ -173,7 +174,12 @@ void Login::on_reg_btn_clicked()
     QString confirm_password = ui->confirm_pwd_reg->text();
     QString email = ui->mail_reg->text();
     // 输入校验
-
+    qDebug() << "ip: "<<ip<<endl;
+    qDebug() << "port: " << port<<endl;
+    qDebug() << "username: " << username<<endl;
+    qDebug() << "password: " << password <<endl;
+    qDebug() << "confirm_password: " << confirm_password<<endl;
+    qDebug() << "email: " << email <<endl;
     // 将数据转成json格式
     QMap<QString, QVariant> jsonMap;
     jsonMap.insert("username", username);
@@ -185,16 +191,19 @@ void Login::on_reg_btn_clicked()
         return;
     }
     QByteArray jsonValue = doc.toJson();
+    qDebug() << "data: " << jsonValue << endl;
     QNetworkRequest request;
     QString url = QString("http://%1:%2/reg").arg(ip).arg(port);
+    qDebug() << "url: " << url << endl;
     request.setUrl(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/json"));
     request.setHeader(QNetworkRequest::ContentLengthHeader, QVariant(jsonValue.size()));
-    QNetworkAccessManager* manager;
+    QNetworkAccessManager* manager = new QNetworkAccessManager;
     QNetworkReply* reply = manager->post(request, jsonValue);
-
+    qDebug() << "post"<<endl;
     // 处理响应数据
     connect(reply, &QNetworkReply::readyRead, [=](){
+        qDebug()<<"connect"<<endl;
         QByteArray response = reply->readAll();
         qDebug()<<"response: "<< response<<endl;
 
@@ -214,7 +223,7 @@ void Login::on_reg_btn_clicked()
         */
         if("002" == status){
             qDebug()<<"注册成功"<<endl;
-            QMessageBox::information(this, QString::fromLocal8Bit("注册成功"),QString::fromLocal8Bit("注册成功,请登录!"));
+            QMessageBox::information(this, QStringLiteral("注册成功"),QStringLiteral("注册成功,请登录"));
             ui->login_username->setText(username);
             ui->login_passwd->setText(password);
             ui->stackedWidget->setCurrentWidget(ui->login_page);
@@ -222,18 +231,21 @@ void Login::on_reg_btn_clicked()
             ui->name_reg->clear();
         }
         else if("003" == status){
-            qDebug()<<QString::fromLocal8Bit("注册失败,用户已经存在")<<endl;
+            qDebug()<<QString("注册失败,用户已经存在")<<endl;
             ui->name_reg->clear();
-            QMessageBox::warning(this, QString::fromLocal8Bit("注册失败"), QString::fromLocal8Bit("用户已经存在"));
+            QMessageBox::warning(this, QString("注册失败"), QString("用户已经存在"));
 
         }
         else{
-            qDebug()<<QString::fromLocal8Bit("注册失败,未知原因")<<endl;
+            qDebug()<<QString("注册失败,未知原因")<<endl;
             ui->name_reg->clear();
-            QMessageBox::warning(this, QString::fromLocal8Bit("注册失败"), QString::fromLocal8Bit("注册失败"));
+            QMessageBox::warning(this, QString("注册失败"), QString("注册失败"));
         }
-        delete reply;
+        //delete reply;
+        //free(reply);    // 为什么释放replay会异常终止？
+        //delete manager;   // 这里也是释放manager
     });
+    //delete manager;   不能把delete manager放在这里,这是一个bug
 }
 
 QString Login::getJsonWebResponse(QByteArray jsondata)
@@ -247,4 +259,66 @@ QString Login::getJsonWebResponse(QByteArray jsondata)
     QJsonValue statusobj = obj.value("code");
     // 取出子对象数据
     return statusobj.toString();
+}
+
+void Login::on_login_btn_clicked()
+{
+    // 获取用户名和密码
+    QString username = ui->login_username->text();
+    QString password = ui->login_passwd->text();
+    // 获取服务器ip地址和端口号
+    QString ip = ui->address->text();
+    QString port = ui->port->text();
+    // 跳转到注册页面的功能写在了Login构造函数中，通过connect实现
+
+    // 将用户名和和密码转换成Json数据格式
+    QJsonObject obj;
+    obj.insert("username", username);
+    obj.insert("password", password);
+    // jsonobj->jsondoc;
+    QJsonDocument doc = QJsonDocument(obj);
+    QByteArray loginJson = doc.toJson();
+    // 准备发送数据
+    QNetworkRequest request;
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("application/json"));
+    request.setHeader(QNetworkRequest::ContentLengthHeader, QVariant(loginJson.size()));
+    // 设置url
+    QString url = QString("http://%1:%2/login").arg(ip).arg(port);
+    request.setUrl(QUrl(url));
+    QNetworkAccessManager* m = new QNetworkAccessManager;
+    QNetworkReply* reply = m->post(request, loginJson);
+    // 等待响应
+    connect(reply, &QNetworkReply::readyRead, [=](){
+           QByteArray response = reply->readAll();
+           // 将得到的响应字符串转为json格式，以提取状态码
+           qDebug()<<response<<endl;
+           QJsonDocument doc = QJsonDocument::fromJson(response);
+           if(!doc.isObject()){
+               qDebug()<<"line296: error type of response"<<endl;
+               return;
+           }
+           QJsonObject obj = doc.object();
+           QString status = obj.value("code").toString();
+           // 判断状态码
+           // 001：登录成功
+           // 003: 用户不存在
+           // 002: 密码错误
+           // 004: 失败
+           if("001" == status){
+               // 登录成功，跳转到文件列表页面
+               // to do
+               qDebug()<<QStringLiteral("登录成功")<<endl;
+           }
+           else if("003" == status){
+               QMessageBox::warning(this, QStringLiteral("登录失败"),QStringLiteral("用户名不存在"));
+               // 这里不进行用户名清空，方便用户检查
+           }
+           else if("002" == status){
+               QMessageBox::warning(this, QStringLiteral("登录失败"),QStringLiteral("用户名或密码不正确"));
+           }
+           else{
+               QMessageBox::warning(this, QStringLiteral("登录失败"),QStringLiteral("登陆失败"));
+           }
+           // 释放资源
+    });
 }
