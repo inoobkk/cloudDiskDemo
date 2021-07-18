@@ -1,4 +1,4 @@
-#ifndef LOGIN_H
+﻿#ifndef LOGIN_H
 #define LOGIN_H
 #include <QJsonObject>
 #include <QJsonDocument>
@@ -31,6 +31,7 @@ private slots:
     // 初始化登录界面的函数,读配置文件
     void on_reg_btn_clicked();
     QString getJsonWebResponse(QByteArray jsondata);
+    void on_login_btn_clicked();
 };
 
 #endif // LOGIN_H
