@@ -218,7 +218,7 @@ void filelist::uploadFileToServer()
 {
     // 如果有文件正在上传, 返回
     if(UploadFile::isUploading() == true){
-        qDebug()<<"a file is uploading.."<<endl;
+        //qDebug()<<"a file is uploading.."<<endl;
         return;
     }
     // 没有文件正在上传，但是上传队列为空，返回
@@ -240,28 +240,59 @@ void filelist::uploadFileToServer()
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setUrl(QUrl(url));
     // 向服务器以json数据格式发送md5值
-    QByteArray md5Json = getMd5Json(tmp->md5);
+    QByteArray md5Json = getMd5Json(tmp->md5, tmp->username, tmp->fileName);
     qDebug()<<"value of md5: "<<md5Json<<endl;
     QNetworkAccessManager* manager = new QNetworkAccessManager;
     QNetworkReply* reply = manager->post(request, md5Json);
     qDebug()<<"data of md5 is sended"<<endl;
     connect(reply, &QNetworkReply::readyRead, [=](){
         // 获得状态码
-        //
+        // 001: 秒传成功
+        // 002: 服务器上没有现成的文件
+        // 003: 操作错误
         QByteArray response = reply->readAll();
-        qDebug()<<"md5 response: "<<response<<endl;
+        QString code = getCode(response);
+        if("" == code){
+            qDebug()<<"response of md5 page is not json type"<<endl;
+        }
+        else if("001" == code){
+            qDebug()<<QStringLiteral("秒传成功")<<endl;
+        }
+        else if("002" == code){
+            qDebug()<<QStringLiteral("需要真正的上传文件")<<endl;
+        }
+        else{
+            qDebug()<<QStringLiteral("操作失败")<<endl;
+        }
 
     });
 
 }
 
-QByteArray filelist::getMd5Json(QString md5)
+QByteArray filelist::getMd5Json(const QString& md5, const QString& username, const QString& filename)
 {
     QJsonObject obj;
     obj.insert("md5", md5);
+    obj.insert("username", username);
+    obj.insert("filename", filename);
     QJsonDocument doc = QJsonDocument(obj);
     return doc.toJson();
 }
+
+
+QString filelist::getCode(const QByteArray &response)
+{
+    QString code;
+    QJsonDocument doc = QJsonDocument::fromJson(response);
+    if(doc.isNull() || doc.isEmpty() || !doc.isObject()){
+
+        return code;
+    }
+    QJsonObject obj = doc.object();
+    code = obj.value("code").toString();
+    return code;
+}
+
 void filelist::showItems()
 {
     clearItems();

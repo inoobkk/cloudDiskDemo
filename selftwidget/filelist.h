@@ -27,7 +27,8 @@ public:
     void checkTaskList();       // 定时检查上传和下载队列，并执行响应的操作
     void uploadFileToServer();  // 从fList取出一个文件，上传到服务器
 
-    QByteArray getMd5Json(QString md5);
+    QByteArray getMd5Json(const QString& md5, const QString& username, const QString& filename);
+    QString getCode(const QByteArray& response);
 private:
     Ui::filelist *ui;
     QList<FileInfo* > fList;
