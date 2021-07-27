@@ -10,13 +10,16 @@
 #include <QJsonArray>
 #include <QIcon>
 #include <QListWidgetItem>
+#include "tools/upload.h"
+#include <QFileDialog>
 filelist::filelist(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::filelist)
 {
     ui->setupUi(this);
     // 初始化listWidget文件列表
-    //initListWidget();
+    initListWidget();
+    checkTaskList();
     // 添加右键菜单
     //addActionMenu();
 }
@@ -44,13 +47,17 @@ void filelist::initListWidget()
     // 发出customContextMenuRequested信号
     ui->listWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 
-    // 点击列表中的上传文件图标
-    connect(ui->listWidget, &QListWidget::itemPressed, this, [=](){
-        //QString
+    // 点击列表中的上传文件图标时上传文件
+    connect(ui->listWidget, &QListWidget::itemPressed, this, [=](QListWidgetItem* item){
+        qDebug()<<"item pressed"<<endl;
+        QString iconName = item->text();
+        qDebug()<<"iconName: "<<iconName<<endl;
+        if(QStringLiteral("上传文件") == iconName){     // "上传文件" == iconName作为条件为什么不行？
+            uploadFiles();
+
+        }
     });
 }
-
-
 
 // 向服务器发起查询请求，获得当前登录用户的所有文件列表
 void filelist::getFileList()
@@ -91,7 +98,7 @@ void filelist::getFileList()
         QJsonObject obj = doc.object();
         QJsonValue jvalue = obj.value("code");
         if(!jvalue.isObject()){
-            qDebug() << QStringLiteral("该用户上传了文件")<<endl;
+            qDebug() << QStringLiteral("查询到用户的文件列表")<<endl;
             getFileListJson(response);
 
         }
@@ -165,6 +172,96 @@ void filelist::addUploadItem()
     QString iconPath =":/fileType/images/upload.png";
     ui->listWidget->addItem(new QListWidgetItem(QIcon(iconPath), QStringLiteral("上传文件")));
 }
+// 打开一个窗口，选择要添加的文件，将文件信息添加到上传队列中
+void filelist::uploadFiles()
+{
+    // 切换到传输列表的上传界面
+
+    QStringList list = QFileDialog::getOpenFileNames();
+    for(int i = 0; i < list.size(); ++i){
+        // 这里名字有点混乱
+        int res = UploadFile::appedUploadList(list.at(i));  // list.at(i)代表第i个文件的路径
+        if(-1 == res){
+            qDebug()<<QStringLiteral("文件太大")<<endl;
+            continue;
+
+        }
+        else if(-2 == res){
+            qDebug()<<QStringLiteral("文件已经在传输列表中")<<endl;
+            continue;
+        }
+        else if(-3 == res){
+            qDebug()<<QStringLiteral("文件打开失败")<<endl;
+            continue;
+        }
+        else if(-4 == res){
+            qDebug()<<QStringLiteral("获取传输列表布局失败")<<endl;
+            continue;
+        }
+
+    }
+
+}
+
+void filelist::checkTaskList()
+{
+    // 上传检测
+    connect(&uploadTimer, &QTimer::timeout, [=](){
+        uploadFileToServer();
+    });
+    uploadTimer.start(500);     // 设置时间间隔为500ms
+
+    // 下载检测，to do
+}
+
+void filelist::uploadFileToServer()
+{
+    // 如果有文件正在上传, 返回
+    if(UploadFile::isUploading() == true){
+        qDebug()<<"a file is uploading.."<<endl;
+        return;
+    }
+    // 没有文件正在上传，但是上传队列为空，返回
+    if(UploadFile::isEmpty() == true){
+        qDebug()<<"upload list is empty"<<endl;
+        return;
+    }
+    UploadFileInfo* tmp = UploadFile::getTask();
+
+    // 获取登录信息
+    QString ip = LoginInfo::getIp();
+    QString port = LoginInfo::getPort();
+
+    // 连接服务器
+
+    // 首先查询服务器端是否已经存在该文件，如果有，则不进行真正的文件上传，而是在user_list表项加入一行信息
+    QNetworkRequest request;
+    QString url = QString("http://%1:%2/md5").arg(ip).arg(port);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setUrl(QUrl(url));
+    // 向服务器以json数据格式发送md5值
+    QByteArray md5Json = getMd5Json(tmp->md5);
+    qDebug()<<"value of md5: "<<md5Json<<endl;
+    QNetworkAccessManager* manager = new QNetworkAccessManager;
+    QNetworkReply* reply = manager->post(request, md5Json);
+    qDebug()<<"data of md5 is sended"<<endl;
+    connect(reply, &QNetworkReply::readyRead, [=](){
+        // 获得状态码
+        //
+        QByteArray response = reply->readAll();
+        qDebug()<<"md5 response: "<<response<<endl;
+
+    });
+
+}
+
+QByteArray filelist::getMd5Json(QString md5)
+{
+    QJsonObject obj;
+    obj.insert("md5", md5);
+    QJsonDocument doc = QJsonDocument(obj);
+    return doc.toJson();
+}
 void filelist::showItems()
 {
     clearItems();
@@ -177,4 +274,5 @@ void filelist::showItems()
     }
     addUploadItem();
 }
+
 
