@@ -114,10 +114,45 @@ int md5_query(char* md5, char* username, char* filename){
 	return 0;
 
 }
-
+int query_user_files(const char* username, const char* md5) {
+	MYSQL* con = NULL;
+	con = mysql_init(NULL);	// 初始化一个MYSQL对象
+	if (NULL == con) {
+		return -1;
+	}
+	// 如果连接失败
+	if (mysql_real_connect(con, NULL, "root", "null", "cloud_disk", 0, NULL, 0) == NULL) {
+		mysql_close(con);
+		return -1;
+	}
+	// 设置utf-8编码
+	mysql_query(con, "set names utf8");
+	char sql[256];
+	// 注意这里如果sql数组太短则装不下所有的字符
+	sprintf(sql, "select * from user_files where username = '%s' and md5 = '%s'", username, md5);
+	if (mysql_query(con, sql) != 0) {
+		mysql_close(con);
+		return -1;
+	}
+	MYSQL_RES* res_set = NULL;
+	res_set = mysql_store_result(con);
+	if (NULL == res_set) {
+		mysql_close(con);
+		return -1;
+	}
+	unsigned int line = 0;
+	line = mysql_num_rows(res_set);
+	if (0 == line) {
+		mysql_close(con);
+		return 0;
+	}
+	mysql_close(con);
+	return 1;
+}
 // 001: 秒传成功
 // 002: 服务器上没有该文件，需要进行真正的上传
 // 003：其他错误
+// 004: 该用户已经有该文件，不用上传
 int main(){
 	while(FCGI_Accept() >= 0){
 		printf("Content-type: text/html\r\n\r\n");
@@ -142,10 +177,21 @@ int main(){
 		char username[128] = {0};
 		char filename[128] = {0};
 		res = getFileInfo(buf, md5, username, filename);
+		
 		if(-1 == res){
 			returnCode("003");
 			continue;
 		}
+		res = query_user_files(username, md5);
+		if (-1 == res) {
+			returnCode("003");
+			continue;
+		}
+		else if (1 == res) {
+			returnCode("004");	// 如果该用户已经有该文件，不进行秒传功能
+			continue;
+		}
+
 		// 从数据库中查找md5值，判断文件是否已经在服务器上
 		res = md5_query(md5, username, filename);
 		if(-1 == res){

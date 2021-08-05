@@ -12,6 +12,7 @@
 #include <QListWidgetItem>
 #include "tools/upload.h"
 #include <QFileDialog>
+#include <QMessageBox>
 filelist::filelist(QWidget *parent) :
     QWidget(parent),
     ui(new Ui::filelist)
@@ -127,7 +128,6 @@ void filelist::getFileListJson(QByteArray data)
         QJsonObject tmp = array[i].toObject();
         FileInfo* finfo = new FileInfo;
         finfo->fileName = tmp.value("filename").toString();
-        qDebug()<<"filename: "<<finfo->fileName<<endl;
         finfo->fileType = getFileType(finfo->fileName);
         QString type = finfo->fileType;
         finfo->item = new QListWidgetItem(QIcon(getFileTypeIcon(type)), finfo->fileName);
@@ -250,18 +250,24 @@ void filelist::uploadFileToServer()
         // 001: 秒传成功
         // 002: 服务器上没有现成的文件
         // 003: 操作错误
+        // 004: 用户已经有该文件
         QByteArray response = reply->readAll();
         QString code = getCode(response);
+        qDebug()<<"response of md5: "<<response<<endl;
         if("" == code){
-            qDebug()<<"response of md5 page is not json type"<<endl;
+            ;
         }
         else if("001" == code){
             qDebug()<<QStringLiteral("秒传成功")<<endl;
             // 删除fList中的文件信息和释放相应的内存
+            UploadFile::dealUploadTask();
         }
         else if("002" == code){
             realUploadFile(tmp);
-            qDebug()<<QStringLiteral("需要真正的上传文件")<<endl;
+            //qDebug()<<QStringLiteral("需要真正的上传文件")<<endl;
+        }
+        else if("004" == code){
+            QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("不要重复上传文件"));
         }
         else{
             qDebug()<<QStringLiteral("操作失败")<<endl;
@@ -346,8 +352,15 @@ void filelist::realUploadFile(UploadFileInfo *finfo)
             UploadFile::dealUploadTask();   // 文件上传失败时也要删除对应的任务
         }
         else{
-            qDebug()<<"no error"<<endl;
-            qDebug()<<"response: "<<reply->readAll()<<endl;
+            UploadFile::dealUploadTask();
+            QByteArray response = reply->readAll();
+            QString code = getCode(response);
+            if("001" == code){
+                qDebug()<<"upload successfully"<<endl;
+            }
+            else{
+                qDebug()<<"upload failed"<<endl;
+            }
         }
 
     });
