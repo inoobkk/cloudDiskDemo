@@ -231,10 +231,8 @@ int storage_fileinfo_to_mysql(char* user, char* filename, char* md5, long size, 
 	char type_cpy[128] = { 0 };
 	
 	getFileType(filename, type);
-	// 这里如果不保存一份type的话不知道为什么在第二次sql语句中type的内容会改变
 	strcpy(type_cpy, type);
 	// 将文件信息插入file_info1表中
-	
 	sprintf(sql, "insert into file_info1 values('%s', '%d', '%s', 'null', '%s', '%ld')", md5, 1, type, fileid, size);
 
 	if (mysql_query(con, sql) != 0) {
@@ -247,7 +245,6 @@ int storage_fileinfo_to_mysql(char* user, char* filename, char* md5, long size, 
 
 	// 这里有bug，应该先将sql清空
 	char sql1[128] = { 0 };
-	printf("type: %s", type_cpy);
 	sprintf(sql1, "insert into user_files values('%s', '%s', 'www.baidu.com', '%s', '%s')", user, filename, md5, type_cpy);
 	
 
