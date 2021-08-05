@@ -223,7 +223,7 @@ void filelist::uploadFileToServer()
     }
     // 没有文件正在上传，但是上传队列为空，返回
     if(UploadFile::isEmpty() == true){
-        qDebug()<<"upload list is empty"<<endl;
+        //qDebug()<<"upload list is empty"<<endl;
         return;
     }
     UploadFileInfo* tmp = UploadFile::getTask();
@@ -257,12 +257,97 @@ void filelist::uploadFileToServer()
         }
         else if("001" == code){
             qDebug()<<QStringLiteral("秒传成功")<<endl;
+            // 删除fList中的文件信息和释放相应的内存
         }
         else if("002" == code){
+            realUploadFile(tmp);
             qDebug()<<QStringLiteral("需要真正的上传文件")<<endl;
         }
         else{
             qDebug()<<QStringLiteral("操作失败")<<endl;
+        }
+
+    });
+
+}
+
+void filelist::realUploadFile(UploadFileInfo *finfo)
+{
+    // 读取文件数据
+    QFile* file = finfo->pfile;             // pfile指向一个打开的文件，pfile的赋值发生在将文件添加到上传列表的时候，这里
+                                            // 有一个疑问就是如果同时打开的文件数量太大怎么办，可不可以在真正上传时才打开文件。
+    QString fileName = finfo->fileName;     // 文件名
+    QString md5 = finfo->md5;               // md5
+    qint64 size = finfo->size;              // 文件大小
+    dataprogress* dp = finfo->dp;           // 进度条
+    QString boundary = UploadFile::getBoundary();
+
+    // 构造数据
+    QByteArray data;
+    data.append(boundary);      // 边界
+    data.append("\r\n");        // 换行符
+    // 文件信息
+    data.append("Content-Disposition: form-data; ");
+    data.append(QString("user=\"%1\"; ").arg(LoginInfo::getUsername()));         // 用户名
+    data.append(QString("filename=\"%1\"; ").arg(fileName));                     // 文件名
+    data.append(QString("md5=\"%1\"; ").arg(md5));
+    data.append(QString("size=%1").arg(size));
+    data.append("\r\n");
+
+    data.append("Content-Type: application/octet-stream");
+    data.append("\r\n");
+    data.append("\r\n");
+    // 上传文件内容
+    if(file->isOpen() == true){
+        qDebug()<<"file is open in filelist.cpp"<<endl;
+        if(file->isReadable() == true){
+            qDebug()<<"file is readable in filelist.cpp"<<endl;
+        }
+        file->seek(0);
+    }
+
+    QByteArray fileData = file->readAll();
+
+    if(fileData.isEmpty()){
+        qDebug()<<"empty file?"<<endl;
+
+    }
+
+    data.append(fileData);   // 文件内容
+    data.append("\r\n");
+    // 结束分隔线
+    data.append(boundary);
+    qDebug()<<"upload data: "<<data<<endl;
+    // 发送数据
+    QNetworkRequest request;
+    QString url = QString("http://%1:%2/upload").arg(LoginInfo::getIp()).arg(LoginInfo::getPort());
+    request.setUrl(QUrl(url));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "multipart/form-data");
+
+
+    QNetworkAccessManager* manager = new QNetworkAccessManager;
+    QNetworkReply* reply = manager->post(request, data);
+    // 刷新进度
+    connect(reply, &QNetworkReply::uploadProgress, [=](qint64 bytesRead, qint64 totalBytes)
+    {
+        qDebug()<<"uploading..."<<endl;
+        qDebug()<<"totalBytes: "<<totalBytes<<endl;
+        if(totalBytes != 0) //这个条件很重要
+        {
+            qDebug() << bytesRead << ", " << totalBytes;
+            // 这里不应该除1024，如果文件小于1024bytes，则显示错误
+            dp->setProgress(bytesRead, totalBytes); //设置进度条
+        }
+    });
+    connect(reply, &QNetworkReply::finished, [=](){
+        if(reply->error() != QNetworkReply::NoError){
+            qDebug()<<reply->errorString()<<endl;
+            reply->deleteLater();
+            UploadFile::dealUploadTask();   // 文件上传失败时也要删除对应的任务
+        }
+        else{
+            qDebug()<<"no error"<<endl;
+            qDebug()<<"response: "<<reply->readAll()<<endl;
         }
 
     });
