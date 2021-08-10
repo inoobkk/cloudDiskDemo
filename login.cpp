@@ -10,6 +10,8 @@
 #include <QNetworkRequest>
 #include <QNetworkReply>
 #include "common/common.h"
+#include "selftwidget/homepage.h"
+#include "tools/loginInfo.h"
 Login::Login(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::Login)
@@ -17,7 +19,9 @@ Login::Login(QWidget *parent) :
     ui->setupUi(this);
     // 去除边框
     this->setWindowFlags(Qt::FramelessWindowHint | windowFlags());
-
+    // 设置默认的ip地址
+    ui->address->setText("101.132.162.195");
+    ui->port->setText("80");
     // 设置当前窗口所在的所有字体大小,如果已经在ui里设置过，这里不生效
     //this->setFont(QFont("华文彩云",16, QFont::Bold, false));
 
@@ -166,6 +170,7 @@ QByteArray Login::getRegJson(QString username, QString pwd, QString mail)
 // 并没有找到调用此函数的，该函数是如何被调用的？通过槽实现的
 void Login::on_reg_btn_clicked()
 {
+    // bug:1.当所有的注册信息为空时也可以成功注册
     qDebug() << "reg"<<endl;
     QString ip = ui->address->text();   //  获得ip地址
     QString port = ui->port->text();    // 获得端口号
@@ -174,12 +179,28 @@ void Login::on_reg_btn_clicked()
     QString confirm_password = ui->confirm_pwd_reg->text();
     QString email = ui->mail_reg->text();
     // 输入校验
-    qDebug() << "ip: "<<ip<<endl;
-    qDebug() << "port: " << port<<endl;
-    qDebug() << "username: " << username<<endl;
-    qDebug() << "password: " << password <<endl;
-    qDebug() << "confirm_password: " << confirm_password<<endl;
-    qDebug() << "email: " << email <<endl;
+    QRegExp usernameExp(USER_REG);
+    QRegExp pwdExp(PASSWD_REG);
+    QRegExp emailExp(EMAIL_REG);
+    QRegExp ipReg(IP_REG);
+    QRegExp portReg(PORT_REG);
+    if(!ipReg.exactMatch(ip) || !portReg.exactMatch(port)){
+        QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("ip或端口格式错误"));
+        return;
+    }
+    if(!usernameExp.exactMatch(username) || !pwdExp.exactMatch(password)){
+        QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("用户名或密码输入格式错误"));
+        return;
+    }
+    if(!emailExp.exactMatch(email)){
+        QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("邮箱格式错误"));
+        return;
+    }
+    if(confirm_password != password){
+        QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("两次输入的密码不一致"));
+        return;
+    }
+
     // 将数据转成json格式
     QMap<QString, QVariant> jsonMap;
     jsonMap.insert("username", username);
@@ -231,15 +252,15 @@ void Login::on_reg_btn_clicked()
             ui->name_reg->clear();
         }
         else if("003" == status){
-            qDebug()<<QString("注册失败,用户已经存在")<<endl;
+            qDebug()<<QStringLiteral("注册失败,用户已经存在")<<endl;
             ui->name_reg->clear();
-            QMessageBox::warning(this, QString("注册失败"), QString("用户已经存在"));
+            QMessageBox::warning(this, QStringLiteral("注册失败"), QStringLiteral("用户已经存在"));
 
         }
         else{
-            qDebug()<<QString("注册失败,未知原因")<<endl;
+            qDebug()<<QStringLiteral("注册失败,未知原因")<<endl;
             ui->name_reg->clear();
-            QMessageBox::warning(this, QString("注册失败"), QString("注册失败"));
+            QMessageBox::warning(this, QStringLiteral("注册失败"), QStringLiteral("注册失败"));
         }
         //delete reply;
         //free(reply);    // 为什么释放replay会异常终止？
@@ -269,6 +290,18 @@ void Login::on_login_btn_clicked()
     // 获取服务器ip地址和端口号
     QString ip = ui->address->text();
     QString port = ui->port->text();
+    QRegExp nameExp(USER_REG);
+    QRegExp pwdExp(PASSWD_REG);
+    QRegExp ipExp(IP_REG);
+    QRegExp portExp(PORT_REG);
+    if(!ipExp.exactMatch(ip) || !portExp.exactMatch(port)){
+        QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("ip或端口格式错误"));
+        return;
+    }
+    if(!nameExp.exactMatch(username) || !pwdExp.exactMatch(password)){
+        QMessageBox::warning(this, QStringLiteral("警告"), QStringLiteral("用户名或密码输入格式错误"));
+        return;
+    }
     // 跳转到注册页面的功能写在了Login构造函数中，通过connect实现
 
     // 将用户名和和密码转换成Json数据格式
@@ -306,8 +339,13 @@ void Login::on_login_btn_clicked()
            // 004: 失败
            if("001" == status){
                // 登录成功，跳转到文件列表页面
-               // to do
+               // to do 1.添加token验证码
+               // 设置登录信息
+               LoginInfo::setInfo(ip, port, username);
                qDebug()<<QStringLiteral("登录成功")<<endl;
+               this->hide();
+               homePage* home = new homePage;   // 这里好像没办法释放了
+               home->showHomepage();
            }
            else if("003" == status){
                QMessageBox::warning(this, QStringLiteral("登录失败"),QStringLiteral("用户名不存在"));
