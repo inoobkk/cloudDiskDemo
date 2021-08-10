@@ -241,7 +241,6 @@ void filelist::uploadFileToServer()
     request.setUrl(QUrl(url));
     // 向服务器以json数据格式发送md5值
     QByteArray md5Json = getMd5Json(tmp->md5, tmp->username, tmp->fileName);
-    qDebug()<<"value of md5: "<<md5Json<<endl;
     QNetworkAccessManager* manager = new QNetworkAccessManager;
     QNetworkReply* reply = manager->post(request, md5Json);
     qDebug()<<"data of md5 is sended"<<endl;
@@ -323,7 +322,7 @@ void filelist::realUploadFile(UploadFileInfo *finfo)
     data.append("\r\n");
     // 结束分隔线
     data.append(boundary);
-    qDebug()<<"upload data: "<<data<<endl;
+    //qDebug()<<"upload data: "<<data<<endl;
     // 发送数据
     QNetworkRequest request;
     QString url = QString("http://%1:%2/upload").arg(LoginInfo::getIp()).arg(LoginInfo::getPort());
@@ -336,18 +335,24 @@ void filelist::realUploadFile(UploadFileInfo *finfo)
     // 刷新进度
     connect(reply, &QNetworkReply::uploadProgress, [=](qint64 bytesRead, qint64 totalBytes)
     {
-        qDebug()<<"uploading..."<<endl;
-        qDebug()<<"totalBytes: "<<totalBytes<<endl;
+        //qDebug()<<"uploading..."<<endl;
+        //qDebug()<<"totalBytes: "<<totalBytes<<endl;
         if(totalBytes != 0) //这个条件很重要
         {
-            qDebug() << bytesRead << ", " << totalBytes;
+            //qDebug() << bytesRead << ", " << totalBytes;
             // 这里不应该除1024，如果文件小于1024bytes，则显示错误
-            dp->setProgress(bytesRead, totalBytes); //设置进度条
+            if(totalBytes >= 1024){
+                dp->setProgress(bytesRead / 1024, totalBytes / 1024); //设置进度条
+            }
+            else{
+                dp->setProgress(bytesRead / 1024, totalBytes / 1024); //设置进度条
+            }
         }
     });
     connect(reply, &QNetworkReply::finished, [=](){
         if(reply->error() != QNetworkReply::NoError){
-            qDebug()<<reply->errorString()<<endl;
+            qDebug()<<"error:"<<reply->errorString()<<endl;
+            qDebug()<<"error:"<<reply->error()<<endl;
             reply->deleteLater();
             UploadFile::dealUploadTask();   // 文件上传失败时也要删除对应的任务
         }
